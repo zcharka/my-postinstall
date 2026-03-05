@@ -14,21 +14,41 @@ else
     read -p "Naciśnij Enter, aby kontynuować, lub Ctrl+C, aby przerwać..."
 fi
 
-# 1. DODANIE REPOZYTORIUM LINEXIN I AKTUALIZACJA
-echo "Dodaję linexin-repo do pacman.conf..."
-if ! grep -q "\[linexin\]" /etc/pacman.conf; then
-    echo -e "\n[linexin]\nSigLevel = Optional TrustAll\nServer = https://petexy.github.io/linexin-repo/\$arch" | sudo tee -a /etc/pacman.conf
-fi
-
-echo "Aktualizuję serwery i bazę pakietów..."
-sudo pacman -Sy --noconfirm archlinux-keyring
-sudo pacman -Syu --noconfirm 
-
-# 2. INSTALACJA NARZĘDZI BUDOWANIA I PODSTAW
-echo "Instaluję podstawowe narzędzia..."
+# ------------------------------------------------------------
+# 1. INSTALACJA NARZĘDZI PODSTAWOWYCH (git, base-devel itp.)
+# ------------------------------------------------------------
+echo "Instaluję podstawowe narzędzia (git, base-devel, itp.)..."
 sudo pacman -S --needed base-devel git wget cmake flatpak ntfs-3g unzip --noconfirm
 
-# 3. INSTALACJA YAY
+# ------------------------------------------------------------
+# 2. KONFIGURACJA LOKALNEGO REPOZYTORIUM LINEXIN
+# ------------------------------------------------------------
+echo "Pobieram i konfiguruję linexin-repo jako lokalne repozytorium..."
+sudo mkdir -p /opt
+if [ ! -d "/opt/linexin-repo" ]; then
+    sudo git clone https://github.com/Petexy/linexin-repo.git /opt/linexin-repo
+else
+    cd /opt/linexin-repo && sudo git pull && cd -
+fi
+
+# Sprawdzenie czy repozytorium zawiera bazę pacmana (opcjonalne ostrzeżenie)
+if [ ! -f "/opt/linexin-repo/x86_64/linexin-repo.db.tar.gz" ]; then
+    echo "UWAGA: Brak pliku bazy danych w /opt/linexin-repo/x86_64."
+    echo "Jeśli repozytorium zawiera tylko PKGBUILD, musisz je najpierw zbudować."
+    echo "Możesz pominąć to ostrzeżenie, jeśli używasz innej metody."
+fi
+
+# Dodanie wpisu do pacman.conf, jeśli jeszcze nie istnieje
+if ! grep -q "\[linexin-repo\]" /etc/pacman.conf; then
+    echo -e "\n[linexin-repo]\nSigLevel = Optional TrustAll\nServer = file:///opt/linexin-repo/x86_64" | sudo tee -a /etc/pacman.conf
+fi
+
+# Aktualizacja listy pakietów (bez aktualizacji całego systemu)
+sudo pacman -Sy --noconfirm
+
+# ------------------------------------------------------------
+# 3. INSTALACJA YAY (AUR helper)
+# ------------------------------------------------------------
 if ! command -v yay &> /dev/null; then
     echo "Buduję yay..."
     git clone https://aur.archlinux.org/yay.git
@@ -38,9 +58,11 @@ if ! command -v yay &> /dev/null; then
     rm -rf yay
 fi
 
+# ------------------------------------------------------------
 # 4. INSTALACJA PROGRAMÓW SYSTEMOWYCH ZALEŻNYCH OD ŚRODOWISKA
+# ------------------------------------------------------------
 if [ "$DE" = "GNOME" ]; then
-    echo "Instaluję pakiety dla GNOME (w tym Wirtualizację, Zsh i Fastfetch)..."
+    echo "Instaluję pakiety dla GNOME (Wirtualizacja, Zsh, Fastfetch i przykładowe rozszerzenia)..."
     sudo pacman -S --noconfirm \
         zsh \
         fastfetch \
@@ -61,9 +83,14 @@ if [ "$DE" = "GNOME" ]; then
         iptables-nft \
         bridge-utils \
         openbsd-netcat \
-        lutris
+        lutris \
+        # Przykładowe rozszerzenia GNOME (z oficjalnych repozytoriów)
+        gnome-shell-extension-dash-to-dock \
+        gnome-shell-extension-blur-my-shell \
+        gnome-shell-extension-appindicator
+
 elif [ "$DE" = "KDE" ]; then
-    echo "Instaluję pakiety dla KDE Plasma (w tym Wirtualizację, Zsh i Fastfetch)..."
+    echo "Instaluję pakiety dla KDE Plasma (Wirtualizacja, Zsh i Fastfetch)..."
     sudo pacman -S --noconfirm \
         zsh \
         fastfetch \
@@ -89,7 +116,9 @@ elif [ "$DE" = "KDE" ]; then
         lutris
 fi
 
+# ------------------------------------------------------------
 # 5. APLIKACJE FLATPAK
+# ------------------------------------------------------------
 echo "Konfiguruję Flathub i instaluję aplikacje..."
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install flathub -y \
@@ -99,7 +128,9 @@ flatpak install flathub -y \
     io.github.zen_browser.zen \
     com.usebottles.bottles
 
+# ------------------------------------------------------------
 # 6. INSTALACJA CZCIONEK, MOTYWÓW I DODATKOWYCH APLIKACJI Z AUR / LINEXIN
+# ------------------------------------------------------------
 echo "Instaluję czcionkę Poppins oraz Faugus Launcher..."
 yay -S --noconfirm ttf-poppins faugus-launcher
 
@@ -115,7 +146,7 @@ if [ "$DE" = "GNOME" ]; then
     rm -rf Colloid-icon-theme
 
 elif [ "$DE" = "KDE" ]; then
-    echo "Instaluję paczki wizualne dla efektu Glassmorphism (KDE)..."
+    echo "Instaluję paczki wizualne dla KDE..."
     yay -S --noconfirm \
         whitesur-kde-theme-git \
         whitesur-icon-theme-git \
@@ -132,7 +163,7 @@ elif [ "$DE" = "KDE" ]; then
     cd ..
     rm -rf Layan-kde
 
-    echo ">>> Instalacja efektu Better Blur DX (wymaga podania hasła sudo dla make install)..."
+    echo ">>> Instalacja efektu Better Blur DX (wymaga sudo)..."
     cd /tmp
     git clone https://github.com/xarblu/kwin-effects-better-blur-dx
     cd kwin-effects-better-blur-dx
@@ -147,7 +178,9 @@ elif [ "$DE" = "KDE" ]; then
     yay -S --noconfirm kwin-effect-rounded-corners-git
 fi
 
+# ------------------------------------------------------------
 # 7. KONFIGURACJA rEFInd
+# ------------------------------------------------------------
 if [ -d "/boot/EFI/refind" ]; then
     echo "Konfiguruję rEFInd..."
 
@@ -166,7 +199,9 @@ EOF
     echo "rEFInd skonfigurowany pomyślnie."
 fi
 
+# ------------------------------------------------------------
 # 8. DYSK NTFS i STEAM FIX
+# ------------------------------------------------------------
 if lsblk -dno LABEL | grep -q "nowy"; then
     echo "Konfiguruję dysk NTFS 'nowy' i dowiązania dla Steam..."
     sudo mkdir -p /mnt/nowy
@@ -179,25 +214,24 @@ if lsblk -dno LABEL | grep -q "nowy"; then
     ln -sf ~/.steam_compat_fix ~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata
 fi
 
+# ------------------------------------------------------------
 # 9. KONFIGURACJA WIRTUALIZACJI (virt-manager) I SIECI BRIDGE
+# ------------------------------------------------------------
 echo "Konfiguruję usługi systemd i grupy dla wirtualizacji..."
 sudo systemctl enable libvirtd.service
 sudo systemctl start libvirtd.service
 
-# Dodanie użytkownika do grupy libvirt
 sudo usermod -aG libvirt $USER
 
-# Uruchomienie domyślnej sieci NAT (na wszelki wypadek)
 if [ -f /etc/libvirt/qemu/networks/default.xml ]; then
     sudo virsh net-define /etc/libvirt/qemu/networks/default.xml 2>/dev/null || true
     sudo virsh net-autostart default 2>/dev/null || true
     sudo virsh net-start default 2>/dev/null || true
 fi
 
-# Wykrycie aktywnego interfejsu i konfiguracja bezpiecznego trybu Bridge (Macvtap)
 MAIN_IF=$(ip route | grep default | awk '{print $5}' | head -n 1)
 if [ -n "$MAIN_IF" ]; then
-    echo "Wykryto główny interfejs sieciowy: $MAIN_IF. Dodaję sieć Bridge do libvirt..."
+    echo "Dodaję sieć Bridge (Macvtap) do libvirt pod interfejs $MAIN_IF..."
     cat <<EOF > /tmp/host-bridge.xml
 <network>
   <name>host-bridge</name>
@@ -210,16 +244,19 @@ EOF
     sudo virsh net-autostart host-bridge 2>/dev/null || true
     sudo virsh net-start host-bridge 2>/dev/null || true
     rm -f /tmp/host-bridge.xml
-    echo "Dodano 'host-bridge' do Virt-Managera!"
 fi
 
+# ------------------------------------------------------------
 # 10. KONFIGURACJA ZSH, STARSHIP I FASTFETCH
-echo "Konfiguruję Starship i Fastfetch dla powłoki Zsh..."
+# ------------------------------------------------------------
+echo "Konfiguruję Zsh, Starship i Fastfetch..."
 echo 'eval "$(starship init zsh)"' > ~/.zshrc
 echo 'fastfetch' >> ~/.zshrc
 chsh -s /usr/bin/zsh $USER
 
+# ------------------------------------------------------------
 # 11. FINALIZACJA WYGLĄDU (Kursor, Ikony, Czcionki, Tapeta)
+# ------------------------------------------------------------
 echo "Ustawiam kursor Bibata Classic Black oraz domyślne opcje wyglądu..."
 
 if [ "$DE" = "GNOME" ]; then
@@ -230,8 +267,7 @@ if [ "$DE" = "GNOME" ]; then
     gsettings set org.gnome.desktop.interface font-name 'Poppins 10'
     gsettings set org.gnome.desktop.interface document-font-name 'Poppins 10'
 
-    # Pobieranie i ustawianie tapety dla GNOME
-    echo "Pobieram i ustawiam tapetę..."
+    # Pobieranie i ustawianie tapety
     URL_TAPETY="https://i.imgur.com/Y9X3VQz.jpeg"
     NAZWA_PLIKU="tapeta_arch.jpg"
     mkdir -p ~/Pobrane ~/Obrazy
@@ -248,14 +284,10 @@ elif [ "$DE" = "KDE" ]; then
     /usr/bin/kcminit kcm_cursortheme
 fi
 
+# ------------------------------------------------------------
+# 12. ZAKOŃCZENIE
+# ------------------------------------------------------------
 echo "=== KONIEC SKRYPTU ==="
-if [ "$DE" = "KDE" ]; then
-    echo "Aby uzyskać pełny look dla KDE (Kinexin / Layan), po restarcie:"
-    echo "1. Otwórz Kvantum Manager i wybierz motyw Layan lub WhiteSurDark."
-    echo "2. W ustawieniach Systemowych ustaw styl Klassy dla okien (zaokrąglone rogi)."
-    echo "3. Uruchom ponownie KWin lub zrestartuj komputer, aby załadować efekty Blur i Rounded Corners."
-fi
-
 echo "System zostanie uruchomiony ponownie za 5 sekund..."
 sleep 5
 reboot
