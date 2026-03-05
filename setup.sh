@@ -17,7 +17,7 @@ fi
 # 1. NAPRAWA MIRRORÓW I AKTUALIZACJA
 echo "Aktualizuję serwery i bazę pakietów..."
 sudo pacman -Sy --noconfirm archlinux-keyring
-sudo pacman -Syu --noconfirm 
+sudo pacman -Syu --noconfirm
 
 # 2. INSTALACJA NARZĘDZI BUDOWANIA I PODSTAW
 echo "Instaluję podstawowe narzędzia..."
@@ -35,7 +35,7 @@ fi
 
 # 4. INSTALACJA PROGRAMÓW SYSTEMOWYCH ZALEŻNYCH OD ŚRODOWISKA
 if [ "$DE" = "GNOME" ]; then
-    echo "Instaluję pakiety dla GNOME (w tym Extension Manager)..."
+    echo "Instaluję pakiety dla GNOME (w tym Extension Manager i wirtualizację)..."
     sudo pacman -S --noconfirm \
         fish \
         gnome-tweaks \
@@ -46,9 +46,17 @@ if [ "$DE" = "GNOME" ]; then
         maven \
         jdk-openjdk \
         pacman-contrib \
-        btop
+        btop \
+        virt-manager \
+        qemu-desktop \
+        libvirt \
+        edk2-ovmf \
+        dnsmasq \
+        iptables-nft \
+        bridge-utils \
+        openbsd-netcat
 elif [ "$DE" = "KDE" ]; then
-    echo "Instaluję pakiety dla KDE Plasma..."
+    echo "Instaluję pakiety dla KDE Plasma (w tym wirtualizację)..."
     sudo pacman -S --noconfirm \
         fish \
         starship \
@@ -61,7 +69,15 @@ elif [ "$DE" = "KDE" ]; then
         kvantum-qt6 \
         ark \
         konsole \
-        dolphin
+        dolphin \
+        virt-manager \
+        qemu-desktop \
+        libvirt \
+        edk2-ovmf \
+        dnsmasq \
+        iptables-nft \
+        bridge-utils \
+        openbsd-netcat
 fi
 
 # 5. APLIKACJE FLATPAK
@@ -121,13 +137,13 @@ elif [ "$DE" = "KDE" ]; then
     yay -S --noconfirm kwin-effect-rounded-corners-git
 fi
 
-# 7. KONFIGURACJA rEFInd 
+# 7. KONFIGURACJA rEFInd
 if [ -d "/boot/EFI/refind" ]; then
     echo "Konfiguruję rEFInd..."
-    
+
     ROOT_UUID="80cae5af-59e1-4176-9e2d-40232d3ea04d"
     PARAMS="rw root=UUID=$ROOT_UUID nvidia-drm.modeset=1 video=HDMI-A-1:d"
-    
+
     UCODE="initrd=\\intel-ucode.img"
     if grep -q "AMD" /proc/cpuinfo; then
         UCODE="initrd=\\amd-ucode.img"
@@ -153,19 +169,53 @@ if lsblk -dno LABEL | grep -q "nowy"; then
     ln -sf ~/.steam_compat_fix ~/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/compatdata
 fi
 
-# 9. KONFIGURACJA STARSHIP I FISH
+# 9. KONFIGURACJA WIRTUALIZACJI (virt-manager) I SIECI BRIDGE
+echo "Konfiguruję usługi systemd i grupy dla wirtualizacji..."
+sudo systemctl enable libvirtd.service
+sudo systemctl start libvirtd.service
+
+# Dodanie użytkownika do grupy libvirt
+sudo usermod -aG libvirt $USER
+
+# Uruchomienie domyślnej sieci NAT (na wszelki wypadek)
+if [ -f /etc/libvirt/qemu/networks/default.xml ]; then
+    sudo virsh net-define /etc/libvirt/qemu/networks/default.xml 2>/dev/null || true
+    sudo virsh net-autostart default 2>/dev/null || true
+    sudo virsh net-start default 2>/dev/null || true
+fi
+
+# Wykrycie aktywnego interfejsu i konfiguracja bezpiecznego trybu Bridge (Macvtap)
+MAIN_IF=$(ip route | grep default | awk '{print $5}' | head -n 1)
+if [ -n "$MAIN_IF" ]; then
+    echo "Wykryto główny interfejs sieciowy: $MAIN_IF. Dodaję sieć Bridge do libvirt..."
+    cat <<EOF > /tmp/host-bridge.xml
+<network>
+  <name>host-bridge</name>
+  <forward mode="bridge">
+    <interface dev="$MAIN_IF"/>
+  </forward>
+</network>
+EOF
+    sudo virsh net-define /tmp/host-bridge.xml 2>/dev/null || true
+    sudo virsh net-autostart host-bridge 2>/dev/null || true
+    sudo virsh net-start host-bridge 2>/dev/null || true
+    rm -f /tmp/host-bridge.xml
+    echo "Dodano 'host-bridge' do Virt-Managera!"
+fi
+
+# 10. KONFIGURACJA STARSHIP I FISH
 echo "Konfiguruję Starship dla powłoki Fish..."
 mkdir -p ~/.config/fish
 echo 'starship init fish | source' > ~/.config/fish/config.fish
 chsh -s /usr/bin/fish $USER
 
-# 10. FINALIZACJA WYGLĄDU (Kursor, Ikony, Czcionki, Tapeta)
+# 11. FINALIZACJA WYGLĄDU (Kursor, Ikony, Czcionki, Tapeta)
 echo "Ustawiam kursor Bibata Classic Black oraz domyślne opcje wyglądu..."
 
 if [ "$DE" = "GNOME" ]; then
     gsettings set org.gnome.desktop.interface icon-theme 'Colloid-purple'
     gsettings set org.gnome.desktop.interface cursor-theme 'Bibata-Classic-Black'
-    
+
     # Ustawianie czcionki Poppins dla interfejsu
     gsettings set org.gnome.desktop.interface font-name 'Poppins 10'
     gsettings set org.gnome.desktop.interface document-font-name 'Poppins 10'
@@ -178,7 +228,7 @@ if [ "$DE" = "GNOME" ]; then
     curl -L "$URL_TAPETY" -o ~/Pobrane/$NAZWA_PLIKU
     cp ~/Pobrane/$NAZWA_PLIKU ~/Obrazy/$NAZWA_PLIKU
     SCIEZKA_FINALNA="$HOME/Obrazy/$NAZWA_PLIKU"
-    
+
     gsettings set org.gnome.desktop.background picture-uri "file://$SCIEZKA_FINALNA"
     gsettings set org.gnome.desktop.background picture-uri-dark "file://$SCIEZKA_FINALNA"
     gsettings set org.gnome.desktop.background picture-options 'zoom'
