@@ -14,10 +14,15 @@ else
     read -p "Naciśnij Enter, aby kontynuować, lub Ctrl+C, aby przerwać..."
 fi
 
-# 1. NAPRAWA MIRRORÓW I AKTUALIZACJA
+# 1. DODANIE REPOZYTORIUM LINEXIN I AKTUALIZACJA
+echo "Dodaję linexin-repo do pacman.conf..."
+if ! grep -q "\[linexin\]" /etc/pacman.conf; then
+    echo -e "\n[linexin]\nSigLevel = Optional TrustAll\nServer = https://petexy.github.io/linexin-repo/\$arch" | sudo tee -a /etc/pacman.conf
+fi
+
 echo "Aktualizuję serwery i bazę pakietów..."
 sudo pacman -Sy --noconfirm archlinux-keyring
-sudo pacman -Syu --noconfirm
+sudo pacman -Syu --noconfirm 
 
 # 2. INSTALACJA NARZĘDZI BUDOWANIA I PODSTAW
 echo "Instaluję podstawowe narzędzia..."
@@ -35,9 +40,10 @@ fi
 
 # 4. INSTALACJA PROGRAMÓW SYSTEMOWYCH ZALEŻNYCH OD ŚRODOWISKA
 if [ "$DE" = "GNOME" ]; then
-    echo "Instaluję pakiety dla GNOME (w tym Extension Manager i wirtualizację)..."
+    echo "Instaluję pakiety dla GNOME (w tym Wirtualizację, Zsh i Fastfetch)..."
     sudo pacman -S --noconfirm \
-        fish \
+        zsh \
+        fastfetch \
         gnome-tweaks \
         extension-manager \
         bibata-cursor-theme-bin \
@@ -54,11 +60,13 @@ if [ "$DE" = "GNOME" ]; then
         dnsmasq \
         iptables-nft \
         bridge-utils \
-        openbsd-netcat
+        openbsd-netcat \
+        lutris
 elif [ "$DE" = "KDE" ]; then
-    echo "Instaluję pakiety dla KDE Plasma (w tym wirtualizację)..."
+    echo "Instaluję pakiety dla KDE Plasma (w tym Wirtualizację, Zsh i Fastfetch)..."
     sudo pacman -S --noconfirm \
-        fish \
+        zsh \
+        fastfetch \
         starship \
         ttf-jetbrains-mono-nerd \
         ttf-inter \
@@ -77,7 +85,8 @@ elif [ "$DE" = "KDE" ]; then
         dnsmasq \
         iptables-nft \
         bridge-utils \
-        openbsd-netcat
+        openbsd-netcat \
+        lutris
 fi
 
 # 5. APLIKACJE FLATPAK
@@ -87,11 +96,12 @@ flatpak install flathub -y \
     com.discordapp.Discord \
     com.valvesoftware.Steam \
     org.mozilla.firefox \
-    io.github.zen_browser.zen
+    io.github.zen_browser.zen \
+    com.usebottles.bottles
 
-# 6. INSTALACJA CZCIONEK I MOTYWÓW Z AUR
-echo "Instaluję czcionkę Poppins..."
-yay -S --noconfirm ttf-poppins
+# 6. INSTALACJA CZCIONEK, MOTYWÓW I DODATKOWYCH APLIKACJI Z AUR / LINEXIN
+echo "Instaluję czcionkę Poppins oraz Faugus Launcher..."
+yay -S --noconfirm ttf-poppins faugus-launcher
 
 if [ "$DE" = "GNOME" ]; then
     echo "Instaluję motyw i ikony Colloid..."
@@ -203,11 +213,11 @@ EOF
     echo "Dodano 'host-bridge' do Virt-Managera!"
 fi
 
-# 10. KONFIGURACJA STARSHIP I FISH
-echo "Konfiguruję Starship dla powłoki Fish..."
-mkdir -p ~/.config/fish
-echo 'starship init fish | source' > ~/.config/fish/config.fish
-chsh -s /usr/bin/fish $USER
+# 10. KONFIGURACJA ZSH, STARSHIP I FASTFETCH
+echo "Konfiguruję Starship i Fastfetch dla powłoki Zsh..."
+echo 'eval "$(starship init zsh)"' > ~/.zshrc
+echo 'fastfetch' >> ~/.zshrc
+chsh -s /usr/bin/zsh $USER
 
 # 11. FINALIZACJA WYGLĄDU (Kursor, Ikony, Czcionki, Tapeta)
 echo "Ustawiam kursor Bibata Classic Black oraz domyślne opcje wyglądu..."
